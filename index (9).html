@@ -1,0 +1,1852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Playoff Pools 🏀</title>
+
+  <script>
+    // Catch JS errors — deferred so body exists before we touch it
+    window.addEventListener('DOMContentLoaded', function() {
+      window.onerror = function(msg, src, line, col, err) {
+        var el = document.getElementById('splash-sub');
+        if (el) { el.textContent = 'Error: ' + msg + (src ? ' (' + src.split('/').pop() + ')' : ''); el.style.color = '#fca5a5'; }
+      };
+    });
+  </script>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"
+    onerror="document.getElementById('splash-sub').textContent='Failed to load React'; document.getElementById('splash-sub').style.color='#fca5a5';"
+    crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+    onerror="document.getElementById('splash-sub').textContent='Failed to load ReactDOM'; document.getElementById('splash-sub').style.color='#fca5a5';"
+    crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"
+    onerror="document.getElementById('splash-sub').textContent='Failed to load Babel'; document.getElementById('splash-sub').style.color='#fca5a5';"
+    crossorigin></script>
+
+  <!-- Official Firebase CDN — guaranteed UMD globals on any host -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"
+    onerror="document.getElementById('splash-sub').textContent='Failed to load Firebase App'; document.getElementById('splash-sub').style.color='#fca5a5';"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"
+    onerror="document.getElementById('splash-sub').textContent='Failed to load Firebase Firestore'; document.getElementById('splash-sub').style.color='#fca5a5';"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #0d0f1a;
+      --bg2:    #161929;
+      --bg3:    #1f2237;
+      --border: rgba(255,255,255,0.07);
+      --text:   #e4e4f0;
+      --muted:  #7878a0;
+      --accent: #f97316;
+      --green:  #22c55e;
+      --red:    #ef4444;
+      --yellow: #f59e0b;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; }
+
+    .splash { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 10px; }
+    .splash-icon  { font-size: 2.5rem; }
+    .splash-title { font-size: 1.1rem; font-weight: 600; }
+    .splash-sub   { font-size: 0.85rem; color: var(--muted); max-width: 340px; text-align: center; line-height: 1.5; }
+
+    .nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 0.5rem; display: flex; align-items: center; position: sticky; top: 0; z-index: 100; overflow-x: auto; }
+    .nav-brand { font-size: 1rem; font-weight: 700; color: var(--accent); padding: 0.875rem 0.75rem 0.875rem 0.5rem; margin-right: auto; white-space: nowrap; flex-shrink: 0; }
+    .nav-btn { background: none; border: none; color: var(--muted); font-size: 0.8rem; padding: 0.875rem 0.6rem; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; white-space: nowrap; flex-shrink: 0; }
+    .nav-btn:hover { color: var(--text); }
+    .nav-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+    .nav-pip { background: var(--accent); color: #fff; border-radius: 99px; padding: 1px 5px; font-size: 0.6rem; font-weight: 700; margin-left: 3px; }
+
+    .container { max-width: 760px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 1.5rem; letter-spacing: -0.02em; }
+
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 0.875rem; }
+    .card-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.875rem; }
+
+    .lb { width: 100%; border-collapse: collapse; }
+    .lb th { text-align: left; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); padding: 0.35rem 0.75rem 0.55rem; border-bottom: 1px solid var(--border); }
+    .lb td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    .lb tr:last-child td { border-bottom: none; }
+    .lb tr:hover td { background: rgba(255,255,255,0.015); }
+    .lb .rank { font-weight: 700; color: var(--muted); width: 28px; font-size: 0.8rem; }
+    .lb .rank-1 { color: #fbbf24; }
+    .lb .rank-2 { color: #94a3b8; }
+    .lb .rank-3 { color: #cd7c2f; }
+    .lb .pts { font-weight: 700; text-align: right; font-size: 1rem; }
+    .lb .pts-zero { color: var(--muted); font-weight: 400; }
+
+    .s-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1.1rem; margin-bottom: 0.6rem; }
+    .s-card.open { border-color: rgba(34,197,94,0.35); }
+    .s-card.locked { border-color: rgba(239,68,68,0.25); }
+    .s-card.completed { opacity: 0.7; }
+    .s-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+    .s-matchup { font-size: 0.975rem; font-weight: 600; }
+    .s-sub { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
+    .s-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+    .timer { font-size: 0.72rem; color: var(--yellow); font-weight: 500; margin-top: 4px; }
+    .timer.urgent { color: var(--red); }
+    .result-line { font-size: 0.78rem; color: var(--green); font-weight: 500; margin-top: 4px; }
+
+    .badge { font-size: 0.67rem; font-weight: 600; padding: 2px 7px; border-radius: 99px; white-space: nowrap; }
+    .badge-east      { background: rgba(59,130,246,0.18);  color: #93c5fd; }
+    .badge-west      { background: rgba(249,115,22,0.18);  color: #fdba74; }
+    .badge-finals    { background: rgba(168,85,247,0.18);  color: #d8b4fe; }
+    .badge-open      { background: rgba(34,197,94,0.18);   color: #86efac; }
+    .badge-locked    { background: rgba(239,68,68,0.18);   color: #fca5a5; }
+    .badge-pending   { background: rgba(255,255,255,0.08); color: var(--muted); }
+    .badge-completed { background: rgba(255,255,255,0.08); color: var(--muted); }
+
+    .form-group { margin-bottom: 0.875rem; }
+    .form-label { display: block; font-size: 0.75rem; font-weight: 500; color: var(--muted); margin-bottom: 0.35rem; }
+    select, input[type="text"], input[type="password"], input[type="datetime-local"] {
+      width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.6rem 0.75rem; color: var(--text); font-size: 0.875rem; outline: none;
+      transition: border-color 0.15s; -webkit-appearance: none; appearance: none;
+    }
+    select:focus, input:focus { border-color: rgba(59,130,246,0.55); }
+    select option { background: var(--bg3); }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0.575rem 1.125rem; border-radius: 8px; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; white-space: nowrap; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #ea6c00; }
+    .btn-ghost { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { border-color: rgba(255,255,255,0.18); }
+    .btn-danger { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.28); }
+    .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.22); }
+    .btn-success { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.28); }
+    .btn-success:hover:not(:disabled) { background: rgba(34,197,94,0.22); }
+    .btn-sm { padding: 0.325rem 0.7rem; font-size: 0.78rem; }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .w-full { width: 100%; }
+
+    .pick-opts  { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.3rem; }
+    .games-opts { display: flex; gap: 0.5rem; margin-top: 0.3rem; }
+    .pick-opt, .games-opt { background: var(--bg3); border: 1.5px solid var(--border); border-radius: 8px; padding: 0.6rem 0.5rem; cursor: pointer; font-size: 0.875rem; text-align: center; transition: all 0.15s; user-select: none; }
+    .games-opt { flex: 1; }
+    .pick-opt:hover, .games-opt:hover { border-color: rgba(255,255,255,0.2); }
+    .pick-opt.sel, .games-opt.sel { border-color: var(--accent); background: rgba(249,115,22,0.1); color: var(--accent); font-weight: 600; }
+
+    .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+    .tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-size: 0.875rem; padding: 0.7rem 1rem; cursor: pointer; margin-bottom: -1px; transition: all 0.15s; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+    .p-row { display: flex; align-items: center; gap: 0.75rem; background: var(--bg3); border-radius: 8px; padding: 0.65rem 0.875rem; margin-bottom: 0.4rem; }
+    .p-row-name { flex: 1; font-weight: 500; font-size: 0.9rem; }
+    .pin-chip { font-family: monospace; font-size: 0.8rem; color: var(--muted); background: var(--bg2); border: 1px solid var(--border); padding: 2px 8px; border-radius: 5px; }
+
+    .alert { padding: 0.7rem 1rem; border-radius: 8px; font-size: 0.875rem; margin-bottom: 0.875rem; }
+    .alert-success { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.28);  color: #86efac; }
+    .alert-error   { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.28);  color: #fca5a5; }
+    .alert-info    { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.28); color: #93c5fd; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .section-label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 1.375rem 0 0.5rem; }
+    .empty-state { color: var(--muted); font-size: 0.875rem; }
+    .save-flash { font-size: 0.78rem; color: var(--green); font-weight: 600; }
+    .my-pick-row { display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
+    .my-pick-row:last-child { border-bottom: none; }
+    .pts-badge { font-size: 0.72rem; font-weight: 600; padding: 2px 7px; border-radius: 99px; }
+    .pts-pos  { background: rgba(34,197,94,0.15); color: #86efac; }
+    .pts-zero { background: rgba(255,255,255,0.06); color: var(--muted); }
+    .admin-s-item { background: var(--bg3); border-radius: 8px; padding: 0.875rem 1rem; margin-bottom: 0.5rem; }
+
+    .bracket-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .bracket-item { background: var(--bg3); border-radius: 8px; padding: 0.75rem 0.875rem; border: 1px solid var(--border); }
+    .bracket-item.live { border-color: rgba(34,197,94,0.3); }
+    .bracket-item.done { opacity: 0.65; }
+    .bracket-conf { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin-bottom: 6px; }
+    .bracket-teams { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .bracket-team { font-size: 0.82rem; font-weight: 500; flex: 1; line-height: 1.3; }
+    .bracket-team.winning { color: var(--accent); }
+    .bracket-team.losing  { color: var(--muted); text-decoration: line-through; }
+    .bracket-score { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .bracket-w { font-size: 1.05rem; font-weight: 700; min-width: 12px; text-align: center; }
+    .bracket-w.hi { color: var(--accent); }
+    .bracket-sep { font-size: 0.8rem; color: var(--muted); }
+    .bracket-sub { font-size: 0.68rem; margin-top: 5px; }
+    .bracket-sub.live { color: var(--green); }
+    .bracket-sub.done { color: var(--muted); }
+    .bracket-sub.pending { color: var(--muted); }
+
+    @media (max-width: 500px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .pick-opts { grid-template-columns: 1fr; }
+      .bracket-grid { grid-template-columns: 1fr; }
+    }
+
+    .picks-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; background: var(--bg2); }
+    .picks-table th { background: var(--bg3); padding: 0.5rem 0.75rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .picks-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .picks-table tr:last-child td { border-bottom: none; }
+    .picks-table tr:hover td { background: rgba(255,255,255,0.015); }
+  </style>
+</head>
+<body>
+
+<div id="root">
+  <div class="splash">
+    <div class="splash-icon">🏀</div>
+    <div class="splash-title">Playoff Pools</div>
+    <div id="splash-sub" class="splash-sub">Loading...</div>
+  </div>
+</div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+
+// ── Firebase ──────────────────────────────────────────────────────────────────
+let db = null;
+try {
+  if (typeof firebase === 'undefined') throw new Error('Firebase SDK not loaded');
+  if (!firebase.apps.length) {
+    firebase.initializeApp({
+      apiKey:            "AIzaSyC2DTRVp8Ab8FlQQ_o00pVkB-Qd-8ts5-A",
+      authDomain:        "playoff-pool-eb483.firebaseapp.com",
+      projectId:         "playoff-pool-eb483",
+      storageBucket:     "playoff-pool-eb483.firebasestorage.app",
+      messagingSenderId: "519124882635",
+      appId:             "1:519124882635:web:b04c814ff7b6382804f74e"
+    });
+  }
+  db = firebase.firestore();
+} catch (e) {
+  console.error('Firebase init error:', e);
+  const el = document.getElementById('splash-sub');
+  if (el) { el.textContent = 'Firebase error: ' + e.message; el.style.color = '#fca5a5'; }
+}
+
+const STS = () => firebase.firestore.FieldValue.serverTimestamp();
+const TSFrom = (d) => firebase.firestore.Timestamp.fromDate(new Date(d));
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const ADMIN_PW    = 'BenIsAdmin2026';
+const ROUND_LABEL = { 1: 'Round 1', 2: 'Conf Semis', 3: 'Conf Finals', 4: 'NBA Finals' };
+const WIN_PTS     = { 1: 5, 2: 6, 3: 6, 4: 7 };
+const GAME_PTS    = { 1: 2, 2: 2, 3: 3, 4: 4 };
+
+const NBA_TEAMS = {
+  East: [
+    'Atlanta Hawks',
+    'Boston Celtics',
+    'Brooklyn Nets',
+    'Charlotte Hornets',
+    'Chicago Bulls',
+    'Cleveland Cavaliers',
+    'Detroit Pistons',
+    'Indiana Pacers',
+    'Miami Heat',
+    'Milwaukee Bucks',
+    'New York Knicks',
+    'Orlando Magic',
+    'Philadelphia 76ers',
+    'Toronto Raptors',
+    'Washington Wizards',
+  ],
+  West: [
+    'Dallas Mavericks',
+    'Denver Nuggets',
+    'Golden State Warriors',
+    'Houston Rockets',
+    'LA Clippers',
+    'Los Angeles Lakers',
+    'Memphis Grizzlies',
+    'Minnesota Timberwolves',
+    'New Orleans Pelicans',
+    'Oklahoma City Thunder',
+    'Phoenix Suns',
+    'Portland Trail Blazers',
+    'Sacramento Kings',
+    'San Antonio Spurs',
+    'Utah Jazz',
+  ],
+};
+
+// 2026 playoff seedings — used for ranking display and bracket projection
+const PLAYOFF_SEEDS = {
+  'Detroit Pistons':        { seed: 1, conf: 'East' },
+  'Boston Celtics':         { seed: 2, conf: 'East' },
+  'New York Knicks':        { seed: 3, conf: 'East' },
+  'Cleveland Cavaliers':    { seed: 4, conf: 'East' },
+  'Toronto Raptors':        { seed: 5, conf: 'East' },
+  'Atlanta Hawks':          { seed: 6, conf: 'East' },
+  'Philadelphia 76ers':     { seed: 7, conf: 'East' },
+  'Orlando Magic':          { seed: 8, conf: 'East' },
+  'Oklahoma City Thunder':  { seed: 1, conf: 'West' },
+  'San Antonio Spurs':      { seed: 2, conf: 'West' },
+  'Denver Nuggets':         { seed: 3, conf: 'West' },
+  'Los Angeles Lakers':     { seed: 4, conf: 'West' },
+  'Houston Rockets':        { seed: 5, conf: 'West' },
+  'Minnesota Timberwolves': { seed: 6, conf: 'West' },
+  'Portland Trail Blazers': { seed: 7, conf: 'West' },
+  'Phoenix Suns':           { seed: 8, conf: 'West' },
+};
+
+// Fixed NBA bracket structure — who plays who in each subsequent round
+// matchupA winner vs matchupB winner → next round series
+const BRACKET_TREE = [
+  { conf: 'East', round: 2, matchupA: ['Detroit Pistons', 'Orlando Magic'],          matchupB: ['Cleveland Cavaliers', 'Toronto Raptors'] },
+  { conf: 'East', round: 2, matchupA: ['Boston Celtics', 'Philadelphia 76ers'],       matchupB: ['New York Knicks', 'Atlanta Hawks'] },
+  { conf: 'West', round: 2, matchupA: ['Oklahoma City Thunder', 'Phoenix Suns'],      matchupB: ['Los Angeles Lakers', 'Houston Rockets'] },
+  { conf: 'West', round: 2, matchupA: ['San Antonio Spurs', 'Portland Trail Blazers'],matchupB: ['Denver Nuggets', 'Minnesota Timberwolves'] },
+  // Conf Finals fed by R2 results — we derive dynamically from R2 winners
+  // Finals: East champ vs West champ — also derived dynamically
+];
+function getStatus(s) {
+  if (!s || !s.status) return 'pending';
+  if (s.status === 'open' && s.tipOffTime) {
+    const t = s.tipOffTime.toDate ? s.tipOffTime.toDate() : new Date(s.tipOffTime);
+    if (Date.now() >= t.getTime()) return 'locked';
+  }
+  return s.status;
+}
+
+function calcPts(pick, result, round) {
+  if (!pick || !pick.winner || !result || !result.winner) return null;
+  if (pick.winner !== result.winner) return 0;
+  let p = WIN_PTS[round] || 0;
+  if (Number(pick.games) === Number(result.games)) p += GAME_PTS[round] || 0;
+  return p;
+}
+
+function countdown(ts) {
+  if (!ts) return null;
+  const t = ts.toDate ? ts.toDate() : new Date(ts);
+  const diff = t.getTime() - Date.now();
+  if (diff <= 0) return null;
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 48) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function confBadge(c) {
+  if (c === 'East') return 'badge badge-east';
+  if (c === 'West') return 'badge badge-west';
+  if (c === 'Finals') return 'badge badge-finals';
+  return 'badge badge-pending';
+}
+
+// ── ESPN auto-sync ────────────────────────────────────────────────────────────
+// Maps ESPN team abbreviations → full team names in our Firebase
+const ESPN_ABBR = {
+  DET:'Detroit Pistons', ORL:'Orlando Magic', BOS:'Boston Celtics',
+  PHI:'Philadelphia 76ers', NYK:'New York Knicks', ATL:'Atlanta Hawks',
+  CLE:'Cleveland Cavaliers', TOR:'Toronto Raptors', OKC:'Oklahoma City Thunder',
+  PHX:'Phoenix Suns', SAS:'San Antonio Spurs', POR:'Portland Trail Blazers',
+  DEN:'Denver Nuggets', MIN:'Minnesota Timberwolves', LAL:'Los Angeles Lakers',
+  HOU:'Houston Rockets', MIA:'Miami Heat', MIL:'Milwaukee Bucks',
+  IND:'Indiana Pacers', CHI:'Chicago Bulls', BKN:'Brooklyn Nets',
+  NOP:'New Orleans Pelicans', UTA:'Utah Jazz', SAC:'Sacramento Kings',
+  GSW:'Golden State Warriors', LAC:'LA Clippers', DAL:'Dallas Mavericks',
+  MEM:'Memphis Grizzlies', WAS:'Washington Wizards', CHA:'Charlotte Hornets',
+};
+
+// ── ESPN direct fetch — no proxy needed, ESPN allows browser CORS ─────────────
+async function espnFetch(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timer);
+    return res.ok ? res : null;
+  } catch(e) {
+    clearTimeout(timer);
+    console.warn('ESPN fetch failed:', url, e.message);
+    return null;
+  }
+}
+
+async function syncFromESPN(seriesDocs) {
+  try {
+    // Fetch both scoreboard (live games) and playoff series (win records)
+    // Both endpoints allow CORS from browsers — no proxy needed
+    const [scoreRes, seriesRes] = await Promise.all([
+      espnFetch('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?groups=90'),
+      espnFetch('https://site.api.espn.com/apis/v2/sports/basketball/nba/series?season=2026&seasontype=3')
+    ]);
+
+    if (!scoreRes && !seriesRes) {
+      return { ok: false, msg: 'ESPN unavailable', liveGames: [] };
+    }
+
+    // ── Live scoreboard ───────────────────────────────────────────────
+    let liveGames = [];
+    let scoreData = null;
+    if (scoreRes) {
+      scoreData = await scoreRes.json();
+      liveGames = (scoreData.events || [])
+        .filter(e => {
+          const status = e.status?.type?.name;
+          return status === 'STATUS_IN_PROGRESS' || status === 'STATUS_HALFTIME';
+        })
+        .map(e => {
+          const comp = e.competitions?.[0];
+          const home = comp?.competitors?.find(c => c.homeAway === 'home');
+          const away = comp?.competitors?.find(c => c.homeAway === 'away');
+          return {
+            id:        e.id,
+            home:      home?.team?.displayName,
+            away:      away?.team?.displayName,
+            homeScore: parseInt(home?.score || 0),
+            awayScore: parseInt(away?.score || 0),
+            detail:    comp?.status?.type?.shortDetail || ''
+          };
+        });
+    }
+
+    // ── Series sync — try dedicated series endpoint first ─────────────
+    let espnSeries = [];
+    if (seriesRes) {
+      const sd = await seriesRes.json();
+      espnSeries = sd.series || [];
+    }
+
+    // ── Fallback: derive series records from scoreboard events ─────────
+    // If series endpoint fails or returns nothing, build records from game results
+    if (!espnSeries.length && scoreData) {
+      const allEvents = scoreData.events || [];
+      // Group completed playoff games by matchup to derive win counts
+      const winMap = {};
+      allEvents.filter(e => e.status?.type?.completed).forEach(e => {
+        const comp = e.competitions?.[0];
+        if (!comp) return;
+        const t1 = comp.competitors?.[0];
+        const t2 = comp.competitors?.[1];
+        if (!t1 || !t2) return;
+        const winner = t1.winner ? t1.team?.displayName : t2.team?.displayName;
+        const key = [t1.team?.displayName, t2.team?.displayName].sort().join('|');
+        if (!winMap[key]) winMap[key] = { t1: t1.team?.displayName, t2: t2.team?.displayName, wins: {} };
+        winMap[key].wins[winner] = (winMap[key].wins[winner] || 0) + 1;
+      });
+      espnSeries = Object.values(winMap).map(m => ({
+        competitors: [
+          { team: { displayName: m.t1, abbreviation: '' }, wins: m.wins[m.t1] || 0 },
+          { team: { displayName: m.t2, abbreviation: '' }, wins: m.wins[m.t2] || 0 }
+        ]
+      }));
+    }
+
+    let updated = 0;
+    for (const es of espnSeries) {
+      const c1 = es.competitors?.[0];
+      const c2 = es.competitors?.[1];
+      if (!c1 || !c2) continue;
+
+      const t1name = ESPN_ABBR[c1.team?.abbreviation] || c1.team?.displayName;
+      const t2name = ESPN_ABBR[c2.team?.abbreviation] || c2.team?.displayName;
+      const t1wins = parseInt(c1.wins || 0);
+      const t2wins = parseInt(c2.wins || 0);
+
+      const match = seriesDocs.find(s =>
+        (s.team1 === t1name && s.team2 === t2name) ||
+        (s.team1 === t2name && s.team2 === t1name)
+      );
+      if (!match) continue;
+
+      const record = match.team1 === t1name
+        ? { t1: t1wins, t2: t2wins }
+        : { t1: t2wins, t2: t1wins };
+
+      const cur = match.record || { t1: 0, t2: 0 };
+      if (cur.t1 !== record.t1 || cur.t2 !== record.t2) {
+        const updates = { record };
+        if (record.t1 === 4 || record.t2 === 4) {
+          const winnerName = record.t1 === 4 ? match.team1 : match.team2;
+          const totalGames = record.t1 + record.t2;
+          updates.status = 'completed';
+          updates.result = { winner: winnerName, games: totalGames, mvp: '' };
+          console.log(`🏆 Series complete: ${winnerName} wins in ${totalGames}`);
+        }
+        await db.collection('series').doc(match.id).update(updates);
+        updated++;
+        console.log(`✓ ESPN sync: ${match.team1} ${record.t1}-${record.t2} ${match.team2}`);
+      }
+    }
+    // After syncing, try to auto-generate next round if needed
+    await autoGenerateNextRound(seriesDocs);
+
+    return { ok: true, updated, time: new Date(), liveGames };
+  } catch(e) {
+    console.warn('ESPN sync error:', e.message);
+    return { ok: false, msg: e.message, liveGames: [] };
+  }
+}
+
+// ── Auto-generate next round series from bracket tree ─────────────────────────
+async function autoGenerateNextRound(seriesDocs) {
+  try {
+    const completedR1 = seriesDocs.filter(s => s.round === 1 && s.status === 'completed' && s.result);
+    if (completedR1.length < 8) return; // Not all R1 done yet
+
+    // Check if R2 series already exist
+    const existingR2 = seriesDocs.filter(s => s.round === 2);
+    if (existingR2.length > 0) {
+      // Check if R2 all done and R3 doesn't exist yet
+      const completedR2 = existingR2.filter(s => s.status === 'completed' && s.result);
+      if (completedR2.length === existingR2.length && completedR2.length === 4) {
+        const existingR3 = seriesDocs.filter(s => s.round === 3);
+        if (existingR3.length === 0) await generateConfFinals(completedR2);
+      }
+      // Check if R3 all done and Finals don't exist
+      const completedR3 = seriesDocs.filter(s => s.round === 3 && s.status === 'completed' && s.result);
+      if (completedR3.length === 2) {
+        const existingR4 = seriesDocs.filter(s => s.round === 4);
+        if (existingR4.length === 0) await generateFinals(completedR3);
+      }
+      return;
+    }
+
+    // Generate R2 from bracket tree
+    for (const branch of BRACKET_TREE) {
+      if (branch.round !== 2) continue;
+      const seriesA = seriesDocs.find(s =>
+        (s.team1 === branch.matchupA[0] && s.team2 === branch.matchupA[1]) ||
+        (s.team1 === branch.matchupA[1] && s.team2 === branch.matchupA[0])
+      );
+      const seriesB = seriesDocs.find(s =>
+        (s.team1 === branch.matchupB[0] && s.team2 === branch.matchupB[1]) ||
+        (s.team1 === branch.matchupB[1] && s.team2 === branch.matchupB[0])
+      );
+      if (!seriesA?.result?.winner || !seriesB?.result?.winner) continue;
+
+      await db.collection('series').add({
+        team1: seriesA.result.winner,
+        team2: seriesB.result.winner,
+        round: 2,
+        conference: branch.conf,
+        status: 'open',
+        tipOffTime: null,
+        result: null,
+        record: { t1: 0, t2: 0 },
+        autoGenerated: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      console.log(`🏀 Auto-generated R2: ${seriesA.result.winner} vs ${seriesB.result.winner}`);
+    }
+  } catch(e) {
+    console.warn('Auto-generate error:', e.message);
+  }
+}
+
+async function generateConfFinals(completedR2) {
+  const eastWinners = completedR2.filter(s => s.conference === 'East').map(s => s.result.winner);
+  const westWinners = completedR2.filter(s => s.conference === 'West').map(s => s.result.winner);
+  for (const [conf, winners] of [['East', eastWinners], ['West', westWinners]]) {
+    if (winners.length !== 2) continue;
+    await db.collection('series').add({
+      team1: winners[0], team2: winners[1],
+      round: 3, conference: conf, status: 'open',
+      tipOffTime: null, result: null, record: { t1: 0, t2: 0 },
+      autoGenerated: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    console.log(`🏀 Auto-generated Conf Finals: ${winners[0]} vs ${winners[1]}`);
+  }
+}
+
+async function generateFinals(completedR3) {
+  const eastChamp = completedR3.find(s => s.conference === 'East')?.result?.winner;
+  const westChamp = completedR3.find(s => s.conference === 'West')?.result?.winner;
+  if (!eastChamp || !westChamp) return;
+  await db.collection('series').add({
+    team1: eastChamp, team2: westChamp,
+    round: 4, conference: 'Finals', status: 'open',
+    tipOffTime: null, result: null, record: { t1: 0, t2: 0 },
+    autoGenerated: true, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  console.log(`🏀 Auto-generated NBA Finals: ${eastChamp} vs ${westChamp}`);
+}
+
+// ── useCollection ─────────────────────────────────────────────────────────────
+function useCollection(col) {
+  const [docs,  setDocs]  = useState([]);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    if (!db) { setError('Firebase not initialised'); return; }
+    const unsub = db.collection(col).onSnapshot(
+      snap => setDocs(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      err  => { console.error(col, err); setError(err.message); }
+    );
+    return unsub;
+  }, [col]);
+  return [docs, error];
+}
+
+// ── Score calc ────────────────────────────────────────────────────────────────
+function buildLeaderboard(players, series, picks) {
+  return players
+    .filter(p => p.active !== false)
+    .map(player => {
+      let pts = 0;
+      series.filter(s => s.status === 'completed' && s.result).forEach(s => {
+        const pick = picks.find(pk => pk.playerId === player.id && pk.seriesId === s.id);
+        const p = calcPts(pick, s.result, s.round);
+        if (p) pts += p;
+        if (s.round === 4 && pick && pick.mvp && s.result.mvp &&
+            pick.mvp.trim().toLowerCase() === s.result.mvp.trim().toLowerCase()) {
+          pts += 0.5;
+        }
+      });
+      return { ...player, pts };
+    })
+    .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name));
+}
+
+// ══ App ═══════════════════════════════════════════════════════════════════════
+function App() {
+  const [view, setView]         = useState('home');
+  const [tick, setTick]         = useState(0);
+  const [syncStatus, setSyncStatus] = useState(null);
+
+  // ── Global auth state ──────────────────────────────────────────────
+  const [currentPlayer, setCurrentPlayer] = useState(null); // { id, name, pin }
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  const [players, playersErr] = useCollection('players');
+  const [series,  seriesErr]  = useCollection('series');
+  const [picks,   picksErr]   = useCollection('picks');
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const seriesRef = React.useRef(series);
+  useEffect(() => { seriesRef.current = series; }, [series]);
+
+  useEffect(() => {
+    if (!series.length) return;
+    async function run() {
+      const result = await syncFromESPN(seriesRef.current);
+      setSyncStatus(result);
+    }
+    run();
+    const isLive = syncStatus?.liveGames?.length > 0;
+    const id = setInterval(run, isLive ? 30000 : 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [series.length, !!(syncStatus?.liveGames?.length)]);
+
+  // Keep currentPlayer in sync if their PIN changes in Firebase
+  useEffect(() => {
+    if (!currentPlayer) return;
+    const updated = players.find(p => p.id === currentPlayer.id);
+    if (updated && updated.pin !== currentPlayer.pin) {
+      setCurrentPlayer({ ...currentPlayer, pin: updated.pin });
+    }
+  }, [players]);
+
+  const dbError    = playersErr || seriesErr || picksErr;
+  const leaderboard = useMemo(() => buildLeaderboard(players, series, picks), [players, series, picks]);
+  const openCount   = useMemo(() => series.filter(s => getStatus(s) === 'open').length, [series, tick]);
+  const myPicks     = useMemo(() => currentPlayer ? picks.filter(p => p.playerId === currentPlayer.id) : [], [picks, currentPlayer]);
+
+  async function manualRefresh() {
+    const result = await syncFromESPN(seriesRef.current);
+    setSyncStatus(result);
+  }
+
+  function handleLoginSuccess(player, navigate = true) {
+    setCurrentPlayer(player);
+    setShowLoginModal(false);
+    if (navigate) setView('picks');
+  }
+
+  function handleModalLogin(player) {
+    // Login from modal — stay on current view, just set player
+    handleLoginSuccess(player, false);
+  }
+
+  function handleLogout() {
+    setCurrentPlayer(null);
+  }
+
+  if (dbError) {
+    return (
+      <div className="splash">
+        <div className="splash-icon">⚠️</div>
+        <div className="splash-title">Connection error</div>
+        <div className="splash-sub" style={{color:'#fca5a5'}}>{dbError}</div>
+        <div className="splash-sub" style={{marginTop:8}}>Check your internet connection and reload.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <nav className="nav">
+        <span className="nav-brand">🏀 Playoff Pools</span>
+        <button className={`nav-btn ${view==='home'?'active':''}`}     onClick={() => setView('home')}>Home</button>
+        <button className={`nav-btn ${view==='allpicks'?'active':''}`} onClick={() => setView('allpicks')}>All Picks</button>
+        <button className={`nav-btn ${view==='picks'?'active':''}`}    onClick={() => setView('picks')}>
+          My Picks{openCount > 0 && <span className="nav-pip">{openCount}</span>}
+        </button>
+        <button className={`nav-btn ${view==='admin'?'active':''}`}    onClick={() => setView('admin')}>Admin</button>
+      </nav>
+
+      {showLoginModal && (
+        <LoginModal
+          players={players.filter(p => p.active !== false)}
+          onSuccess={handleModalLogin}
+          onClose={() => setShowLoginModal(false)}
+        />
+      )}
+
+      {view === 'home'     && <HomeView     series={series} leaderboard={leaderboard} picks={picks} myPicks={myPicks} currentPlayer={currentPlayer} tick={tick} syncStatus={syncStatus} liveGames={syncStatus?.liveGames||[]} onRefresh={manualRefresh} onLoginRequest={() => setShowLoginModal(true)} />}
+      {view === 'allpicks' && <AllPicksView series={series} leaderboard={leaderboard} picks={picks} />}
+      {view === 'picks'    && <PicksView    players={players.filter(p => p.active !== false)} series={series} picks={picks} currentPlayer={currentPlayer} onLoginSuccess={handleLoginSuccess} onLogout={handleLogout} tick={tick} />}
+      {view === 'admin'    && <AdminView    players={players} series={series} picks={picks} />}
+    </div>
+  );
+}
+
+// ══ Login Modal ═══════════════════════════════════════════════════════════════
+function LoginModal({ players, onSuccess, onClose }) {
+  const [playerId, setPlayerId] = useState('');
+  const [pin,      setPin]      = useState('');
+  const [err,      setErr]      = useState('');
+
+  function login() {
+    const player = players.find(p => p.id === playerId);
+    if (!player)                          { setErr('Select your name'); return; }
+    if (String(pin) !== String(player.pin)) { setErr('Wrong PIN'); return; }
+    onSuccess(player);
+  }
+
+  return (
+    <div style={{
+      position:'fixed',inset:0,zIndex:200,
+      background:'rgba(0,0,0,0.65)',backdropFilter:'blur(4px)',
+      display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:14,padding:'1.5rem',width:'100%',maxWidth:360}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem'}}>
+          <span style={{fontWeight:700,fontSize:'1.1rem'}}>Log in</span>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Your name</label>
+          <select value={playerId} onChange={e=>{setPlayerId(e.target.value);setPin('');setErr('');}}>
+            <option value="">Select your name...</option>
+            {players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Your 4-digit PIN</label>
+          <input type="password" maxLength={4} value={pin}
+            onChange={e=>setPin(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&login()}
+            placeholder="••••" autoFocus />
+        </div>
+        {err && <div className="alert alert-error">{err}</div>}
+        <button className="btn btn-primary w-full" onClick={login}>Let's go →</button>
+        <p style={{color:'var(--muted)',fontSize:'0.78rem',marginTop:'0.75rem'}}>Don't know your PIN? Ask Ben.</p>
+      </div>
+    </div>
+  );
+}
+
+// ══ All Picks View ════════════════════════════════════════════════════════════
+function AllPicksView({ series, leaderboard, picks }) {
+  const [mobile, setMobile] = useState(window.innerWidth < 640);
+  const [apTab, setApTab]   = useState('picks'); // 'picks' | 'accuracy'
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < 640);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+
+  const lockedOrDone = [...series]
+    .filter(s => ['locked','completed'].includes(s.status) || getStatus(s) === 'locked')
+    .sort((a,b) => a.round - b.round || a.conference.localeCompare(b.conference));
+
+  const completedSeries = series.filter(s => s.status === 'completed' && s.result);
+
+  // ── Accuracy leaderboard ─────────────────────────────────────────────
+  const accuracy = useMemo(() => {
+    return leaderboard.map(player => {
+      let correct = 0, total = 0;
+      completedSeries.forEach(s => {
+        const pick = picks.find(p => p.playerId === player.id && p.seriesId === s.id);
+        if (!pick) return;
+        total++;
+        if (pick.winner === s.result.winner) correct++;
+      });
+      return { ...player, correct, total, pct: total > 0 ? Math.round((correct / total) * 100) : null };
+    }).sort((a, b) => {
+      if (b.pct === null && a.pct === null) return a.name.localeCompare(b.name);
+      if (b.pct === null) return -1;
+      if (a.pct === null) return 1;
+      return b.pct - a.pct || b.correct - a.correct;
+    });
+  }, [leaderboard, completedSeries, picks]);
+
+  // ── Consensus: pick distribution per completed series ────────────────
+  const consensus = useMemo(() => {
+    return completedSeries.map(s => {
+      const total = leaderboard.length;
+      const t1picks = picks.filter(p => p.seriesId === s.id && p.winner === s.team1).length;
+      const t2picks = picks.filter(p => p.seriesId === s.id && p.winner === s.team2).length;
+      const majority = t1picks >= t2picks ? s.team1 : s.team2;
+      const majorityPicks = Math.max(t1picks, t2picks);
+      const correct = s.result.winner === majority;
+      return { s, t1picks, t2picks, total, majority, majorityPicks, correct };
+    });
+  }, [completedSeries, picks, leaderboard]);
+
+  if (!lockedOrDone.length) {
+    return (
+      <div className="container">
+        <div className="page-title">All Picks</div>
+        <div className="alert alert-info">Picks will appear here once series are locked.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{maxWidth:'100%',padding:'1.5rem 0 3rem'}}>
+      <div style={{padding:'0 1rem'}}>
+        <div className="page-title">All Picks</div>
+        <div className="tabs" style={{marginBottom:'1rem'}}>
+          <button className={`tab ${apTab==='picks'?'active':''}`} onClick={()=>setApTab('picks')}>Picks</button>
+          <button className={`tab ${apTab==='accuracy'?'active':''}`} onClick={()=>setApTab('accuracy')}>Accuracy</button>
+          {consensus.length > 0 && <button className={`tab ${apTab==='consensus'?'active':''}`} onClick={()=>setApTab('consensus')}>Consensus</button>}
+        </div>
+      </div>
+
+      {apTab === 'picks' && (
+        [1,2,3,4].map(round => {
+          const roundSeries = lockedOrDone.filter(s => s.round === round);
+          if (!roundSeries.length) return null;
+          return (
+            <div key={round} style={{marginBottom:'2rem'}}>
+              <div className="section-label" style={{padding:'0 1rem'}}>{ROUND_LABEL[round]}</div>
+              {mobile
+                ? <MobilePicksGrid roundSeries={roundSeries} leaderboard={leaderboard} picks={picks} />
+                : <DesktopPicksTable roundSeries={roundSeries} leaderboard={leaderboard} picks={picks} />
+              }
+            </div>
+          );
+        })
+      )}
+
+      {apTab === 'accuracy' && (
+        <div style={{padding:'0 1rem'}}>
+          {completedSeries.length === 0
+            ? <div className="alert alert-info">Accuracy will show once series are completed.</div>
+            : <div style={{borderRadius:12,border:'1px solid var(--border)',overflow:'hidden'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',background:'var(--bg2)'}}>
+                  <thead>
+                    <tr>
+                      <th style={{background:'var(--bg3)',textAlign:'left',padding:'0.55rem 0.875rem',fontSize:'0.68rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--muted)',borderBottom:'1px solid var(--border)'}}>#</th>
+                      <th style={{background:'var(--bg3)',textAlign:'left',padding:'0.55rem 0.875rem',fontSize:'0.68rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--muted)',borderBottom:'1px solid var(--border)'}}>Player</th>
+                      <th style={{background:'var(--bg3)',textAlign:'center',padding:'0.55rem 0.875rem',fontSize:'0.68rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--muted)',borderBottom:'1px solid var(--border)'}}>Correct</th>
+                      <th style={{background:'var(--bg3)',textAlign:'right',padding:'0.55rem 0.875rem',fontSize:'0.68rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--muted)',borderBottom:'1px solid var(--border)'}}>%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accuracy.map((p, i) => (
+                      <tr key={p.id}>
+                        <td style={{padding:'0.65rem 0.875rem',borderBottom:'1px solid var(--border)',fontWeight:700,color:i===0?'#fbbf24':i===1?'#94a3b8':i===2?'#cd7c2f':'var(--muted)',fontSize:'0.8rem',width:28}}>{i+1}</td>
+                        <td style={{padding:'0.65rem 0.875rem',borderBottom:'1px solid var(--border)',fontWeight:500,fontSize:'0.9rem'}}>{p.name}</td>
+                        <td style={{padding:'0.65rem 0.875rem',borderBottom:'1px solid var(--border)',textAlign:'center',fontSize:'0.875rem'}}>
+                          {p.total > 0 ? `${p.correct}/${p.total}` : <span style={{color:'var(--muted)'}}>—</span>}
+                        </td>
+                        <td style={{padding:'0.65rem 0.875rem',borderBottom:'1px solid var(--border)',textAlign:'right',fontWeight:700,fontSize:'1rem',color: p.pct >= 70 ? 'var(--green)' : p.pct >= 50 ? 'var(--accent)' : p.pct !== null ? '#fca5a5' : 'var(--muted)'}}>
+                          {p.pct !== null ? `${p.pct}%` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+          }
+        </div>
+      )}
+
+      {apTab === 'consensus' && (
+        <div style={{padding:'0 1rem'}}>
+          {consensus.length === 0
+            ? <div className="alert alert-info">Consensus will show once series are completed.</div>
+            : consensus.map(({s, t1picks, t2picks, total, correct}) => {
+                const t1pct = total > 0 ? Math.round((t1picks / total) * 100) : 0;
+                const t2pct = total > 0 ? Math.round((t2picks / total) * 100) : 0;
+                return (
+                  <div key={s.id} style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:10,padding:'0.875rem 1rem',marginBottom:'0.6rem'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.6rem'}}>
+                      <div>
+                        <div style={{fontWeight:600,fontSize:'0.875rem'}}>{s.team1} vs {s.team2}</div>
+                        <div style={{fontSize:'0.7rem',color:'var(--muted)',marginTop:2}}>{ROUND_LABEL[s.round]} · Winner: <strong style={{color:'var(--green)'}}>{s.result.winner}</strong></div>
+                      </div>
+                      <span style={{fontSize:'0.72rem',fontWeight:600,padding:'2px 8px',borderRadius:99,background:correct?'rgba(34,197,94,0.12)':'rgba(239,68,68,0.12)',color:correct?'#86efac':'#fca5a5'}}>
+                        {correct ? 'Crowd correct ✓' : 'Crowd wrong ✗'}
+                      </span>
+                    </div>
+                    <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
+                      <span style={{fontSize:'0.78rem',minWidth:80,color: s.result.winner===s.team1?'var(--green)':'var(--muted)',fontWeight: s.result.winner===s.team1?600:400}}>{shortName(s.team1)}</span>
+                      <div style={{flex:1,background:'var(--bg3)',borderRadius:99,height:8,overflow:'hidden',display:'flex'}}>
+                        <div style={{width:`${t1pct}%`,background: s.result.winner===s.team1?'var(--green)':'#fca5a5',borderRadius:'99px 0 0 99px',transition:'width 0.4s'}}></div>
+                        <div style={{width:`${t2pct}%`,background: s.result.winner===s.team2?'var(--green)':'#fca5a5',borderRadius:'0 99px 99px 0',transition:'width 0.4s'}}></div>
+                      </div>
+                      <span style={{fontSize:'0.78rem',minWidth:80,textAlign:'right',color: s.result.winner===s.team2?'var(--green)':'var(--muted)',fontWeight: s.result.winner===s.team2?600:400}}>{shortName(s.team2)}</span>
+                    </div>
+                    <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.68rem',color:'var(--muted)',marginTop:4}}>
+                      <span>{t1picks} picks ({t1pct}%)</span>
+                      <span>{t2picks} picks ({t2pct}%)</span>
+                    </div>
+                  </div>
+                );
+              })
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DesktopPicksTable({ roundSeries, leaderboard, picks }) {
+  return (
+    <div style={{overflowX:'auto',margin:'0 1rem',borderRadius:12,border:'1px solid var(--border)'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.83rem',background:'var(--bg2)'}}>
+        <thead>
+          <tr>
+            <th style={{
+              position:'sticky',left:0,zIndex:2,
+              background:'var(--bg3)',textAlign:'left',padding:'0.55rem 0.875rem',
+              fontSize:'0.68rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',
+              color:'var(--muted)',borderBottom:'1px solid var(--border)',
+              borderRight:'1px solid var(--border)',minWidth:130,whiteSpace:'nowrap'
+            }}>Player</th>
+            {roundSeries.map(s => (
+              <th key={s.id} style={{
+                background:'var(--bg3)',padding:'0.55rem 0.75rem',textAlign:'center',
+                fontSize:'0.68rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',
+                color:'var(--muted)',borderBottom:'1px solid var(--border)',minWidth:95,whiteSpace:'nowrap'
+              }}>
+                <div style={{color:'var(--text)',fontWeight:600}}>{shortName(s.team1)}</div>
+                <div style={{opacity:0.45,fontWeight:400}}>vs {shortName(s.team2)}</div>
+              </th>
+            ))}
+            <th style={{
+              position:'sticky',right:0,
+              background:'var(--bg3)',padding:'0.55rem 0.875rem',textAlign:'right',
+              fontSize:'0.68rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.08em',
+              color:'var(--muted)',borderBottom:'1px solid var(--border)',
+              borderLeft:'1px solid var(--border)',minWidth:48,whiteSpace:'nowrap'
+            }}>Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {leaderboard.map((player, idx) => {
+            let rowPts = 0;
+            const cells = roundSeries.map(s => {
+              const pick = picks.find(p => p.playerId === player.id && p.seriesId === s.id);
+              const pts  = s.status === 'completed' ? calcPts(pick, s.result, s.round) : null;
+              if (pts) rowPts += pts;
+              return { s, pick, pts };
+            });
+            return (
+              <tr key={player.id} style={{background: idx%2===0 ? 'transparent' : 'rgba(255,255,255,0.018)'}}>
+                <td style={{
+                  position:'sticky',left:0,zIndex:1,
+                  background: idx%2===0 ? 'var(--bg2)' : 'var(--bg3)',
+                  fontWeight:600,fontSize:'0.82rem',padding:'0.6rem 0.875rem',
+                  borderBottom:'1px solid var(--border)',borderRight:'1px solid var(--border)',
+                  whiteSpace:'nowrap'
+                }}>{player.name}</td>
+                {cells.map(({s, pick, pts}) => (
+                  <td key={s.id} style={{padding:'0.5rem 0.75rem',borderBottom:'1px solid var(--border)',textAlign:'center'}}>
+                    {pick ? <CompactPickCell pick={pick} series={s} pts={pts} /> : <span style={{color:'var(--muted)',fontSize:'0.7rem'}}>—</span>}
+                  </td>
+                ))}
+                <td style={{
+                  position:'sticky',right:0,
+                  background: idx%2===0 ? 'var(--bg2)' : 'var(--bg3)',
+                  fontWeight:700,fontSize:'0.95rem',padding:'0.6rem 0.875rem',
+                  borderBottom:'1px solid var(--border)',borderLeft:'1px solid var(--border)',
+                  textAlign:'right',
+                  color: rowPts > 0 ? 'var(--accent)' : 'var(--muted)'
+                }}>{rowPts || '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MobilePicksGrid({ roundSeries, leaderboard, picks }) {
+  return (
+    <div style={{padding:'0 1rem',display:'flex',flexDirection:'column',gap:'0.5rem'}}>
+      {leaderboard.map(player => {
+        let rowPts = 0;
+        const playerPicks = roundSeries.map(s => {
+          const pick = picks.find(p => p.playerId === player.id && p.seriesId === s.id);
+          const pts  = s.status === 'completed' ? calcPts(pick, s.result, s.round) : null;
+          if (pts) rowPts += pts;
+          return { s, pick, pts };
+        });
+        return (
+          <div key={player.id} style={{background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:10,padding:'0.75rem'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.6rem'}}>
+              <span style={{fontWeight:600,fontSize:'0.9rem'}}>{player.name}</span>
+              <span style={{fontWeight:700,fontSize:'0.95rem',color: rowPts > 0 ? 'var(--accent)' : 'var(--muted)'}}>{rowPts || '0 pts'}</span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.3rem'}}>
+              {playerPicks.map(({s, pick, pts}) => (
+                <div key={s.id} style={{background:'var(--bg3)',borderRadius:6,padding:'0.35rem 0.5rem'}}>
+                  <div style={{fontSize:'0.6rem',color:'var(--muted)',marginBottom:2}}>{shortName(s.team1)} vs {shortName(s.team2)}</div>
+                  {pick
+                    ? <CompactPickCell pick={pick} series={s} pts={pts} />
+                    : <span style={{color:'var(--muted)',fontSize:'0.7rem'}}>no pick</span>
+                  }
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CompactPickCell({ pick, series, pts }) {
+  const isTeam1 = pick.winner === series.team1;
+  const winner  = shortName(isTeam1 ? series.team1 : series.team2);
+  const correct = pts !== null && pts > 0;
+  const wrong   = pts === 0;
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'center',flexWrap:'wrap'}}>
+      <span style={{
+        fontSize:'0.78rem',fontWeight:600,
+        color: correct ? 'var(--green)' : wrong ? 'var(--muted)' : 'var(--text)',
+        textDecoration: wrong ? 'line-through' : 'none',
+        whiteSpace:'nowrap'
+      }}>{winner} in {pick.games}</span>
+      {pts !== null && pts > 0 && (
+        <span style={{fontSize:'0.65rem',fontWeight:700,color:'var(--green)',background:'rgba(34,197,94,0.12)',padding:'1px 5px',borderRadius:4}}>+{pts}</span>
+      )}
+      {pts === 0 && (
+        <span style={{fontSize:'0.65rem',color:'var(--muted)',background:'rgba(255,255,255,0.05)',padding:'1px 5px',borderRadius:4}}>0</span>
+      )}
+    </div>
+  );
+}
+
+function shortName(team) {
+  if (!team) return '';
+  const parts = team.split(' ');
+  return parts[parts.length - 1];
+}
+
+// ══ Bracket Tracker ══════════════════════════════════════════════════════════
+function seriesStatusLine(s) {
+  const r  = s.record || { t1: 0, t2: 0 };
+  const t1 = r.t1 || 0;
+  const t2 = r.t2 || 0;
+  if (s.status === 'completed' && s.result) return { text: `${s.result.winner} wins series`, cls: 'done' };
+  if (t1 === 0 && t2 === 0) return { text: 'Series not started', cls: 'pending' };
+  if (t1 === t2) return { text: `Tied ${t1}-${t2}`, cls: 'live' };
+  const leader = t1 > t2 ? s.team1 : s.team2;
+  const lw = Math.max(t1, t2), ll = Math.min(t1, t2);
+  return { text: `${leader} leads ${lw}-${ll}`, cls: 'live' };
+}
+
+function BracketTracker({ series, syncStatus, onRefresh, myPicks, currentPlayer, onLoginRequest }) {
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await onRefresh();
+    setRefreshing(false);
+  }
+
+  const active = [...series]
+    .filter(s => s.status !== 'pending')
+    .sort((a, b) => a.round - b.round || a.conference.localeCompare(b.conference));
+
+  if (!active.length) return null;
+
+  const syncLine = syncStatus
+    ? syncStatus.ok
+      ? `Updated ${syncStatus.time.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`
+      : `ESPN unavailable`
+    : `Syncing...`;
+
+  return (
+    <div className="card" style={{marginBottom:'0.875rem'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.875rem'}}>
+        <div className="card-title" style={{marginBottom:0}}>Series Tracker</div>
+        <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
+          <span style={{fontSize:'0.68rem',color: syncStatus?.ok ? 'var(--muted)' : 'var(--yellow)'}}>
+            {syncStatus?.ok ? '🔄' : '⚠️'} {syncLine}
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={handleRefresh} disabled={refreshing} style={{fontSize:'0.75rem',padding:'3px 10px'}}>
+            {refreshing ? '...' : '↻ Refresh'}
+          </button>
+        </div>
+      </div>
+      <div className="bracket-grid">
+        {active.map(s => {
+          const r    = s.record || { t1: 0, t2: 0 };
+          const t1w  = r.t1 || 0;
+          const t2w  = r.t2 || 0;
+          const done = s.status === 'completed' && s.result;
+          const winner = done ? s.result.winner : null;
+          const sl   = seriesStatusLine(s);
+
+          // My pick for this series
+          const myPick = myPicks?.find(p => p.seriesId === s.id);
+          const pts    = done && myPick ? calcPts(myPick, s.result, s.round) : null;
+          const pickCorrect = pts !== null && pts > 0;
+          const pickWrong   = pts === 0;
+          const pickLeading = !done && myPick && (
+            (myPick.winner === s.team1 && t1w > t2w) ||
+            (myPick.winner === s.team2 && t2w > t1w)
+          );
+          const pickTrailing = !done && myPick && (
+            (myPick.winner === s.team1 && t2w > t1w) ||
+            (myPick.winner === s.team2 && t1w > t2w)
+          );
+
+          return (
+            <div key={s.id} className={`bracket-item ${sl.cls === 'live' ? 'live' : ''} ${done ? 'done' : ''}`}>
+              <div className="bracket-conf">{ROUND_LABEL[s.round]} · {s.conference}</div>
+              <div className="bracket-teams">
+                <span className={`bracket-team ${done && winner===s.team1 ? 'winning' : done && winner!==s.team1 ? 'losing' : t1w>t2w ? 'winning' : ''}`}>
+                  {s.team1}
+                </span>
+                <div className="bracket-score">
+                  <span className={`bracket-w ${t1w>t2w?'hi':''}`}>{t1w}</span>
+                  <span className="bracket-sep">-</span>
+                  <span className={`bracket-w ${t2w>t1w?'hi':''}`}>{t2w}</span>
+                </div>
+                <span className={`bracket-team ${done && winner===s.team2 ? 'winning' : done && winner!==s.team2 ? 'losing' : t2w>t1w ? 'winning' : ''}`} style={{textAlign:'right'}}>
+                  {s.team2}
+                </span>
+              </div>
+              <div className={`bracket-sub ${sl.cls}`}>{sl.text}</div>
+
+              {/* My pick row */}
+              <div style={{marginTop:6,paddingTop:6,borderTop:'1px solid var(--border)'}}>
+                {myPick ? (
+                  <div style={{display:'flex',alignItems:'center',gap:5,fontSize:'0.7rem'}}>
+                    <span style={{color:'var(--muted)'}}>Your pick:</span>
+                    <span style={{
+                      fontWeight:600,
+                      color: pickCorrect ? 'var(--green)' : pickWrong ? '#fca5a5' : pickLeading ? 'var(--accent)' : pickTrailing ? 'var(--muted)' : 'var(--text)',
+                      textDecoration: pickWrong ? 'line-through' : 'none'
+                    }}>
+                      {shortName(myPick.winner)} in {myPick.games}
+                    </span>
+                    {pickCorrect && <span style={{color:'var(--green)',fontWeight:700}}>+{pts}pts ✓</span>}
+                    {pickWrong   && <span style={{color:'#fca5a5'}}>✗</span>}
+                    {pickLeading && !done && <span style={{color:'var(--accent)'}}>↑</span>}
+                    {pickTrailing && !done && <span style={{color:'var(--muted)'}}>↓</span>}
+                  </div>
+                ) : (
+                  <button
+                    onClick={onLoginRequest}
+                    style={{
+                      background:'none',border:'none',padding:0,cursor:'pointer',
+                      fontSize:'0.7rem',color:'var(--accent)',fontWeight:600,
+                      textDecoration:'underline'
+                    }}
+                  >Log in to see your pick</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ══ Live Scores ═══════════════════════════════════════════════════════════════
+function LiveScores({ games }) {
+  if (!games || !games.length) return null;
+  return (
+    <div style={{marginBottom:'0.875rem'}}>
+      {games.map(g => {
+        const leading = g.homeScore > g.awayScore ? g.home : g.awayScore > g.homeScore ? g.away : null;
+        return (
+          <div key={g.id} style={{
+            background:'var(--bg2)', border:'1px solid rgba(34,197,94,0.4)',
+            borderRadius:10, padding:'0.75rem 1rem', marginBottom:'0.5rem',
+            display:'flex', alignItems:'center', gap:'0.75rem'
+          }}>
+            <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+              <span style={{
+                background:'rgba(239,68,68,0.18)', color:'#fca5a5',
+                fontSize:'0.65rem', fontWeight:700, padding:'2px 7px',
+                borderRadius:99, textTransform:'uppercase', letterSpacing:'0.05em',
+                animation:'pulse 1.5s infinite'
+              }}>● Live</span>
+              <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>{g.detail}</span>
+            </div>
+            <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:'0.75rem'}}>
+              <span style={{fontSize:'0.875rem',fontWeight: leading===g.away?700:400,color: leading===g.away?'var(--text)':'var(--muted)', textAlign:'right',flex:1}}>{shortName(g.away)}</span>
+              <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                <span style={{fontSize:'1.2rem',fontWeight:700,color: g.awayScore>g.homeScore?'var(--accent)':'var(--text)'}}>{g.awayScore}</span>
+                <span style={{color:'var(--muted)',fontSize:'0.8rem'}}>-</span>
+                <span style={{fontSize:'1.2rem',fontWeight:700,color: g.homeScore>g.awayScore?'var(--accent)':'var(--text)'}}>{g.homeScore}</span>
+              </div>
+              <span style={{fontSize:'0.875rem',fontWeight: leading===g.home?700:400,color: leading===g.home?'var(--text)':'var(--muted)',flex:1}}>{shortName(g.home)}</span>
+            </div>
+          </div>
+        );
+      })}
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+    </div>
+  );
+}
+
+// ══ Home ══════════════════════════════════════════════════════════════════════
+function HomeView({ series, leaderboard, picks, myPicks, currentPlayer, tick, syncStatus, liveGames, onRefresh, onLoginRequest }) {
+
+  const projected = useMemo(() => {
+    const activeSeries = series.filter(s => s.status === 'locked' && s.record && (s.record.t1 > 0 || s.record.t2 > 0));
+    return leaderboard.map(player => {
+      let proj = 0;
+      activeSeries.forEach(s => {
+        const pick = picks.find(p => p.playerId === player.id && p.seriesId === s.id);
+        if (!pick) return;
+        const leader = s.record.t1 >= s.record.t2 ? s.team1 : s.team2;
+        if (pick.winner === leader) proj += WIN_PTS[s.round] || 0;
+      });
+      return { ...player, proj: player.pts + proj };
+    }).sort((a, b) => b.proj - a.proj || b.pts - a.pts || a.name.localeCompare(b.name));
+  }, [leaderboard, series, picks]);
+
+  return (
+    <div className="container">
+      <div className="page-title">2026 NBA Playoffs 🏆</div>
+      <LiveScores games={liveGames} />
+      <BracketTracker series={series} syncStatus={syncStatus} onRefresh={onRefresh} myPicks={myPicks} currentPlayer={currentPlayer} onLoginRequest={onLoginRequest} />
+
+      <div className="card">
+        <div className="card-title">Standings</div>
+        {leaderboard.length === 0
+          ? <p className="empty-state">No players yet — Ben needs to add them in Admin.</p>
+          : <table className="lb">
+              <thead>
+                <tr>
+                  <th>#</th><th>Player</th>
+                  <th style={{textAlign:'right'}}>Pts</th>
+                  <th style={{textAlign:'right',color:'var(--yellow)'}}>Proj</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projected.map((p, i) => (
+                  <tr key={p.id} style={{background: currentPlayer?.id===p.id ? 'rgba(249,115,22,0.06)' : 'transparent'}}>
+                    <td className={`rank ${['rank-1','rank-2','rank-3'][i]||''}`}>{i+1}</td>
+                    <td style={{fontWeight: currentPlayer?.id===p.id ? 700 : 500}}>
+                      {p.name}{currentPlayer?.id===p.id ? ' 👈' : ''}
+                    </td>
+                    <td className={`pts ${p.pts===0?'pts-zero':''}`}>{p.pts}</td>
+                    <td style={{textAlign:'right',fontSize:'0.85rem',fontWeight:600,color: p.proj > p.pts ? 'var(--yellow)' : 'var(--muted)'}}>{p.proj}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+        }
+      </div>
+
+    </div>
+  );
+}
+
+function SeriesCard({ s, myPick }) {
+  const status = getStatus(s);
+  const timer  = countdown(s.tipOffTime);
+  const s1seed = PLAYOFF_SEEDS[s.team1]?.seed;
+  const s2seed = PLAYOFF_SEEDS[s.team2]?.seed;
+
+  const pickCorrect  = myPick && s.status==='completed' && s.result && calcPts(myPick, s.result, s.round) > 0;
+  const pickWrong    = myPick && s.status==='completed' && s.result && calcPts(myPick, s.result, s.round) === 0;
+  const r = s.record || { t1: 0, t2: 0 };
+  const pickLeading  = myPick && s.status!=='completed' && ((myPick.winner===s.team1 && r.t1>r.t2)||(myPick.winner===s.team2 && r.t2>r.t1));
+  const pickTrailing = myPick && s.status!=='completed' && ((myPick.winner===s.team1 && r.t2>r.t1)||(myPick.winner===s.team2 && r.t1>r.t2));
+
+  return (
+    <div className={`s-card ${status}`}>
+      <div className="s-header">
+        <div style={{flex:1}}>
+          <div className="s-matchup">
+            {s.team1&&s.team2
+              ? <>{s1seed&&<span style={{fontSize:'0.7rem',color:'var(--muted)',marginRight:4}}>({s1seed})</span>}{s.team1} <span style={{color:'var(--muted)'}}>vs</span> {s2seed&&<span style={{fontSize:'0.7rem',color:'var(--muted)',marginRight:2}}>({s2seed})</span>}{s.team2}</>
+              : 'TBD vs TBD'}
+          </div>
+          <div className="s-sub">{ROUND_LABEL[s.round]} · {s.conference}</div>
+          {status==='open'&&timer&&<div className={`timer ${parseInt(timer)<2?'urgent':''}`}>⏱ Picks close in {timer}</div>}
+          {status==='completed'&&s.result&&(
+            <div className="result-line">✓ {s.result.winner} wins in {s.result.games}{s.result.mvp?` · MVP: ${s.result.mvp}`:''}</div>
+          )}
+          {myPick && (
+            <div style={{marginTop:4,fontSize:'0.7rem',display:'flex',alignItems:'center',gap:4}}>
+              <span style={{color:'var(--muted)'}}>Your pick:</span>
+              <span style={{fontWeight:600,color:pickCorrect?'var(--green)':pickWrong?'#fca5a5':pickLeading?'var(--accent)':pickTrailing?'var(--muted)':'var(--text)',textDecoration:pickWrong?'line-through':'none'}}>
+                {shortName(myPick.winner)} in {myPick.games}
+              </span>
+              {pickCorrect&&<span style={{color:'var(--green)'}}>✓</span>}
+              {pickWrong&&<span style={{color:'#fca5a5'}}>✗</span>}
+              {pickLeading&&!pickCorrect&&!pickWrong&&<span style={{color:'var(--accent)'}}>↑</span>}
+              {pickTrailing&&!pickCorrect&&!pickWrong&&<span style={{color:'var(--muted)'}}>↓</span>}
+            </div>
+          )}
+        </div>
+        <div className="s-right">
+          <span className={confBadge(s.conference)}>{s.conference}</span>
+          <span className={`badge badge-${status}`}>{status}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ══ Picks ═════════════════════════════════════════════════════════════════════
+function PicksView({ players, series, picks, currentPlayer, onLoginSuccess, onLogout, tick }) {
+  const [localPlayerId, setLocalPlayerId] = useState('');
+  const [pin,      setPin]      = useState('');
+  const [err,      setErr]      = useState('');
+  const [draft,    setDraft]    = useState({});
+  const [saving,   setSaving]   = useState(false);
+  const [flash,    setFlash]    = useState({});
+  const [changingPin, setChangingPin] = useState(false);
+  const [newPin,      setNewPin]      = useState('');
+  const [pinMsg,      setPinMsg]      = useState({ text: '', type: 'success' });
+
+  const playerId   = currentPlayer?.id || '';
+  const player     = currentPlayer || players.find(p => p.id === localPlayerId);
+  const myPicks    = picks.filter(p => p.playerId === playerId);
+  const openSeries = series.filter(s => getStatus(s)==='open').sort((a,b)=>a.round-b.round);
+
+  // Seed draft from existing picks when player logs in
+  useEffect(() => {
+    if (!playerId) return;
+    const ex = {};
+    picks.filter(p=>p.playerId===playerId).forEach(p=>{
+      ex[p.seriesId]={winner:p.winner,games:Number(p.games),mvp:p.mvp||''};
+    });
+    setDraft(ex);
+  }, [playerId, picks.length]);
+
+  function login() {
+    const p = players.find(pl => pl.id === localPlayerId);
+    if (!p)                               { setErr('Select your name'); return; }
+    if (String(pin) !== String(p.pin))    { setErr('Wrong PIN — ask Ben if you forgot'); return; }
+    setErr('');
+    onLoginSuccess(p);
+  }
+
+  function setPick(sid,key,val){ setDraft(prev=>({...prev,[sid]:{...(prev[sid]||{}),[key]:val}})); }
+
+  async function submit(seriesId) {
+    const d=draft[seriesId]||{};
+    if (!d.winner){ setErr('Choose a winner first'); return; }
+    if (!d.games) { setErr('Choose number of games'); return; }
+    setErr(''); setSaving(true);
+    try {
+      await db.collection('picks').doc(`${playerId}_${seriesId}`).set({
+        playerId,seriesId,winner:d.winner,games:Number(d.games),mvp:d.mvp||'',submittedAt:STS()
+      });
+      setFlash(prev=>({...prev,[seriesId]:true}));
+      setTimeout(()=>setFlash(prev=>({...prev,[seriesId]:false})),2500);
+    } catch(e){ setErr('Save failed: '+e.message); }
+    setSaving(false);
+  }
+
+  async function saveNewPin() {
+    if (newPin.length !== 4) { setPinMsg({ text: 'PIN must be exactly 4 digits', type: 'error' }); return; }
+    if (newPin === String(player?.pin)) { setPinMsg({ text: 'Same as current PIN', type: 'error' }); return; }
+    try {
+      await db.collection('players').doc(playerId).update({ pin: newPin });
+      setPinMsg({ text: `✓ PIN updated to ${newPin}`, type: 'success' });
+      setNewPin('');
+      setTimeout(() => { setChangingPin(false); setPinMsg({ text: '', type: 'success' }); }, 2500);
+    } catch(e) { setPinMsg({ text: 'Failed to update PIN', type: 'error' }); }
+  }
+
+  if (!currentPlayer) {
+    return (
+      <div className="container">
+        <div className="page-title">My Picks</div>
+        <div className="card" style={{maxWidth:380}}>
+          <div className="form-group">
+            <label className="form-label">Your name</label>
+            <select value={localPlayerId} onChange={e=>{setLocalPlayerId(e.target.value);setPin('');setErr('');}}>
+              <option value="">Select your name...</option>
+              {players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Your 4-digit PIN</label>
+            <input type="password" maxLength={4} value={pin}
+              onChange={e=>setPin(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&login()}
+              placeholder="••••" />
+          </div>
+          {err&&<div className="alert alert-error">{err}</div>}
+          <button className="btn btn-primary w-full" onClick={login}>Let's go →</button>
+          <p style={{color:'var(--muted)',fontSize:'0.78rem',marginTop:'0.75rem'}}>Don't know your PIN? Ask Ben.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container">
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1.5rem'}}>
+        <div className="page-title" style={{marginBottom:0}}>Hey, {player?.name}! 👋</div>
+        <div style={{display:'flex',gap:'0.5rem'}}>
+          <button className="btn btn-ghost btn-sm" onClick={()=>setChangingPin(c=>!c)}>🔑 PIN</button>
+          <button className="btn btn-ghost btn-sm" onClick={()=>{onLogout();setPin('');setLocalPlayerId('');setErr('');setChangingPin(false);}}>Log out</button>
+        </div>
+      </div>
+
+      {changingPin && (
+        <div className="card" style={{marginBottom:'0.875rem'}}>
+          <div className="card-title">Change PIN</div>
+          <div style={{display:'flex',gap:'0.5rem',alignItems:'flex-start'}}>
+            <div style={{flex:1}}>
+              <input type="password" maxLength={4} placeholder="New 4-digit PIN" value={newPin}
+                onChange={e=>setNewPin(e.target.value.replace(/\D/g,''))}
+                onKeyDown={e=>e.key==='Enter'&&saveNewPin()} />
+            </div>
+            <button className="btn btn-primary" onClick={saveNewPin} disabled={newPin.length!==4}>Save</button>
+            <button className="btn btn-ghost" onClick={()=>{setChangingPin(false);setNewPin('');setPinMsg({text:'',type:'success'});}}>Cancel</button>
+          </div>
+          {pinMsg.text && <div className={`alert alert-${pinMsg.type}`} style={{marginTop:'0.75rem'}}>{pinMsg.text}</div>}
+        </div>
+      )}
+
+      {err&&<div className="alert alert-error">{err}</div>}
+
+      {/* Unsubmitted picks notification */}
+      {(() => {
+        const missing = openSeries.filter(s => !myPicks.find(p => p.seriesId === s.id));
+        if (!missing.length) return null;
+        return (
+          <div className="alert alert-error" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>⚠️ You have {missing.length} open series without a pick!</span>
+          </div>
+        );
+      })()}
+
+      {openSeries.length===0
+        ?<div className="alert alert-info">No picks open right now — check back when the next round starts!</div>
+        :openSeries.map(s=>{
+          const d=draft[s.id]||{};
+          const sub=myPicks.find(p=>p.seriesId===s.id);
+          return (
+            <div key={s.id} className="card">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.875rem'}}>
+                <div>
+                  <div style={{fontWeight:600,fontSize:'1rem'}}>
+                    {PLAYOFF_SEEDS[s.team1]&&<span style={{fontSize:'0.7rem',color:'var(--muted)',marginRight:4}}>({PLAYOFF_SEEDS[s.team1].seed})</span>}
+                    {s.team1} <span style={{color:'var(--muted)'}}>vs</span>
+                    {PLAYOFF_SEEDS[s.team2]&&<span style={{fontSize:'0.7rem',color:'var(--muted)',margin:'0 4px'}}>({PLAYOFF_SEEDS[s.team2].seed})</span>}
+                    {s.team2}
+                  </div>
+                  <div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:2}}>{ROUND_LABEL[s.round]} · {s.conference}</div>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
+                  {flash[s.id]&&<span className="save-flash">✓ Saved!</span>}
+                  {sub&&!flash[s.id]&&<span style={{fontSize:'0.72rem',color:'var(--muted)'}}>Saved: <strong style={{color:'var(--text)'}}>{sub.winner} in {sub.games}</strong></span>}
+                </div>
+              </div>
+              <div className="form-label">Who wins?</div>
+              <div className="pick-opts">
+                {[s.team1,s.team2].map(t=>(
+                  <div key={t} className={`pick-opt ${d.winner===t?'sel':''}`} onClick={()=>setPick(s.id,'winner',t)}>{t}</div>
+                ))}
+              </div>
+              <div className="form-label" style={{marginTop:'0.75rem'}}>In how many games?</div>
+              <div className="games-opts">
+                {[4,5,6,7].map(g=>(
+                  <div key={g} className={`games-opt ${d.games===g?'sel':''}`} onClick={()=>setPick(s.id,'games',g)}>{g}</div>
+                ))}
+              </div>
+              {s.round===4&&(
+                <div className="form-group" style={{marginTop:'0.75rem'}}>
+                  <label className="form-label">Finals MVP — tiebreaker, 0.5 pts</label>
+                  <input type="text" placeholder="Player name..." value={d.mvp||''} onChange={e=>setPick(s.id,'mvp',e.target.value)} />
+                </div>
+              )}
+              <button className="btn btn-primary" style={{marginTop:'0.875rem'}}
+                onClick={()=>submit(s.id)} disabled={saving||!d.winner||!d.games}>
+                {sub?'Update pick':'Submit pick'}
+              </button>
+            </div>
+          );
+        })
+      }
+
+      {/* Current series with my picks */}
+      {(() => {
+        const activeSeries = series.filter(s => ['locked','completed'].includes(s.status) || getStatus(s)==='locked').sort((a,b)=>a.round-b.round);
+        if (!activeSeries.length) return null;
+        return (
+          <>
+            <div className="section-label" style={{marginTop:'1.5rem'}}>Current Series</div>
+            {activeSeries.map(s => {
+              const myPick = myPicks.find(p => p.seriesId === s.id);
+              return <SeriesCard key={s.id} s={s} myPick={myPick} />;
+            })}
+          </>
+        );
+      })()}
+
+      {/* Projected next round matchups */}
+      {(() => {
+        const projectedMatchups = [];
+
+        // Generate projected R2 from current R1 leaders
+        for (const branch of BRACKET_TREE) {
+          if (branch.round !== 2) continue;
+          const existingR2 = series.some(s => s.round === 2);
+          if (existingR2) continue; // R2 already exists, skip projection
+
+          const seriesA = series.find(s =>
+            (s.team1===branch.matchupA[0]&&s.team2===branch.matchupA[1])||
+            (s.team1===branch.matchupA[1]&&s.team2===branch.matchupA[0])
+          );
+          const seriesB = series.find(s =>
+            (s.team1===branch.matchupB[0]&&s.team2===branch.matchupB[1])||
+            (s.team1===branch.matchupB[1]&&s.team2===branch.matchupB[0])
+          );
+          if (!seriesA || !seriesB) continue;
+
+          const leaderA = seriesA.status==='completed' ? seriesA.result?.winner
+            : seriesA.record?.t1 > seriesA.record?.t2 ? seriesA.team1
+            : seriesA.record?.t2 > seriesA.record?.t1 ? seriesA.team2 : null;
+          const leaderB = seriesB.status==='completed' ? seriesB.result?.winner
+            : seriesB.record?.t1 > seriesB.record?.t2 ? seriesB.team1
+            : seriesB.record?.t2 > seriesB.record?.t1 ? seriesB.team2 : null;
+
+          const teamALabel = leaderA || `${shortName(branch.matchupA[0])} or ${shortName(branch.matchupA[1])}`;
+          const teamBLabel = leaderB || `${shortName(branch.matchupB[0])} or ${shortName(branch.matchupB[1])}`;
+          projectedMatchups.push({ conf: branch.conf, teamA: teamALabel, teamB: teamBLabel, round: branch.round });
+        }
+
+        if (!projectedMatchups.length) return null;
+        return (
+          <>
+            <div className="section-label" style={{marginTop:'1.5rem'}}>Projected Next Round</div>
+            {projectedMatchups.map((m, i) => (
+              <div key={i} style={{
+                background:'var(--bg3)', border:'1px solid var(--border)', borderRadius:10,
+                padding:'0.875rem 1rem', marginBottom:'0.6rem', opacity:0.6,
+                pointerEvents:'none', userSelect:'none'
+              }}>
+                <div style={{fontSize:'0.62rem',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.09em',color:'var(--muted)',marginBottom:4}}>{ROUND_LABEL[m.round] || 'Next Round'} · {m.conf} · Projected</div>
+                <div style={{fontSize:'0.9rem',fontWeight:500,color:'var(--muted)'}}>{m.teamA} <span style={{opacity:0.5}}>vs</span> {m.teamB}</div>
+                <div style={{fontSize:'0.68rem',color:'var(--muted)',marginTop:3}}>Picks open when round begins</div>
+              </div>
+            ))}
+          </>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ══ Admin ═════════════════════════════════════════════════════════════════════
+function AdminView({ players, series, picks }) {
+  const [pw,     setPw]     = useState('');
+  const [authed, setAuthed] = useState(false);
+  const [err,    setErr]    = useState('');
+  const [tab,    setTab]    = useState('players');
+
+  function login() {
+    if (pw === ADMIN_PW) { setAuthed(true); setErr(''); }
+    else setErr('Wrong password');
+  }
+
+  if (!authed) {
+    return (
+      <div className="container">
+        <div className="page-title">Admin</div>
+        <div className="card" style={{maxWidth:340}}>
+          <div className="form-group">
+            <label className="form-label">Admin password</label>
+            <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} placeholder="Password" />
+          </div>
+          {err&&<div className="alert alert-error">{err}</div>}
+          <button className="btn btn-primary w-full" onClick={login}>Enter</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container">
+      <div className="page-title">⚙️ Admin</div>
+      <div className="tabs">
+        {['players','series','results'].map(t=>(
+          <button key={t} className={`tab ${tab===t?'active':''}`} onClick={()=>setTab(t)} style={{textTransform:'capitalize'}}>{t}</button>
+        ))}
+      </div>
+      {tab==='players'&&<AdminPlayers players={players} picks={picks} />}
+      {tab==='series' &&<AdminSeries  series={series} />}
+      {tab==='results'&&<AdminResults series={series} />}
+    </div>
+  );
+}
+
+function AdminPlayers({ players, picks }) {
+  const [name,setName]=useState('');
+  const [pin,setPin]  =useState('');
+  const [msg,setMsg]  =useState({text:'',type:'success'});
+  const flash=(text,type='success')=>{setMsg({text,type});setTimeout(()=>setMsg({text:'',type:'success'}),3500);};
+
+  async function add() {
+    if(!name.trim())    {flash('Enter a name','error');return;}
+    if(pin.length!==4)  {flash('PIN must be 4 digits','error');return;}
+    if(players.some(p=>p.name.toLowerCase()===name.trim().toLowerCase())){flash('Player already exists','error');return;}
+    try{
+      await db.collection('players').add({name:name.trim(),pin,active:true,createdAt:STS()});
+      flash(`✓ ${name.trim()} added — PIN: ${pin}`);
+      setName('');setPin('');
+    }catch(e){flash(e.message,'error');}
+  }
+
+  async function toggle(p){ try{await db.collection('players').doc(p.id).update({active:p.active===false});}catch(e){flash(e.message,'error');} }
+
+  async function resetPin(p){
+    const np=String(Math.floor(1000+Math.random()*9000));
+    try{await db.collection('players').doc(p.id).update({pin:np});flash(`✓ ${p.name} new PIN: ${np}`);}catch(e){flash(e.message,'error');}
+  }
+
+  async function del(p){
+    const n=picks.filter(pk=>pk.playerId===p.id).length;
+    if(!confirm(`Delete ${p.name}?${n>0?` Their ${n} pick(s) stay in the database.`:''}`))return;
+    try{await db.collection('players').doc(p.id).delete();}catch(e){flash(e.message,'error');}
+  }
+
+  return (
+    <div>
+      <div className="card">
+        <div className="card-title">Add player</div>
+        <div className="grid-2">
+          <div className="form-group" style={{marginBottom:0}}><label className="form-label">Name</label><input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="Full name" /></div>
+          <div className="form-group" style={{marginBottom:0}}><label className="form-label">4-digit PIN</label><input type="text" maxLength={4} value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,''))} placeholder="e.g. 4821" /></div>
+        </div>
+        {msg.text&&<div className={`alert alert-${msg.type}`} style={{marginTop:'0.75rem'}}>{msg.text}</div>}
+        <button className="btn btn-primary" style={{marginTop:'0.875rem'}} onClick={add} disabled={!name.trim()||pin.length!==4}>Add player</button>
+      </div>
+      <div className="card">
+        <div className="card-title">Players ({players.filter(p=>p.active!==false).length} active)</div>
+        {players.length===0&&<p className="empty-state">No players yet.</p>}
+        {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>(
+          <div key={p.id} className="p-row" style={{opacity:p.active===false?0.4:1}}>
+            <span className="p-row-name">{p.name}</span>
+            <span className="pin-chip">PIN: {p.pin}</span>
+            <button className="btn btn-ghost btn-sm" onClick={()=>resetPin(p)}>New PIN</button>
+            <button className={`btn btn-sm ${p.active===false?'btn-success':'btn-danger'}`} onClick={()=>toggle(p)}>{p.active===false?'Restore':'Remove'}</button>
+            <button className="btn btn-danger btn-sm" onClick={()=>del(p)}>✕</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminSeries({ series }) {
+  const blank={team1:'',team2:'',round:'1',conference:'East',tipOffTime:'',status:'open'};
+  const [form,setForm]=useState(blank);
+  const [msg,setMsg]  =useState({text:'',type:'success'});
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const flash=(text,type='success')=>{setMsg({text,type});setTimeout(()=>setMsg({text:'',type:'success'}),3500);};
+
+  // Warning: check if a round is complete but next round not yet created
+  const roundWarning = useMemo(() => {
+    for (const round of [1, 2, 3]) {
+      const roundSeries = series.filter(s => s.round === round);
+      if (!roundSeries.length) continue;
+      const allDone = roundSeries.every(s => s.status === 'completed');
+      const nextExists = series.some(s => s.round === round + 1);
+      if (allDone && !nextExists) return `Round ${round} is complete — next round series will be auto-generated on next sync. Hit Refresh on the home page if they haven't appeared yet.`;
+    }
+    return null;
+  }, [series]);
+
+  async function add() {
+    if(!form.team1.trim()||!form.team2.trim()){flash('Enter both team names','error');return;}
+    try{
+      await db.collection('series').add({
+        team1:form.team1.trim(),team2:form.team2.trim(),
+        round:parseInt(form.round),conference:form.conference,
+        status:form.status,
+        tipOffTime:form.tipOffTime?TSFrom(form.tipOffTime):null,
+        result:null,record:{t1:0,t2:0},createdAt:STS()
+      });
+      flash(`✓ ${form.team1} vs ${form.team2} added`);
+      setForm(blank);
+    }catch(e){flash(e.message,'error');}
+  }
+
+  async function setStatus(s,status){ try{await db.collection('series').doc(s.id).update({status});}catch(e){flash(e.message,'error');} }
+  async function del(s){ if(!confirm(`Delete "${s.team1} vs ${s.team2}"?`))return; try{await db.collection('series').doc(s.id).delete();}catch(e){flash(e.message,'error');} }
+
+  async function updateRecord(s, t1, t2) {
+    try { await db.collection('series').doc(s.id).update({ record: { t1, t2 } }); }
+    catch(e) { flash(e.message, 'error'); }
+  }
+
+  return (
+    <div>
+      {roundWarning && <div className="alert alert-info" style={{marginBottom:'1rem'}}>{roundWarning}</div>}
+      <div className="card">
+        <div className="card-title">Add series</div>
+        <div className="grid-2">
+          <div className="form-group">
+            <label className="form-label">Team 1</label>
+            <select value={form.team1} onChange={e=>set('team1',e.target.value)}>
+              <option value="">Select team...</option>
+              {form.conference === 'Finals'
+                ? [...NBA_TEAMS.East, ...NBA_TEAMS.West].sort().map(t=><option key={t} value={t}>{t}</option>)
+                : (NBA_TEAMS[form.conference]||[]).map(t=><option key={t} value={t}>{t}</option>)
+              }
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Team 2</label>
+            <select value={form.team2} onChange={e=>set('team2',e.target.value)}>
+              <option value="">Select team...</option>
+              {form.conference === 'Finals'
+                ? [...NBA_TEAMS.East, ...NBA_TEAMS.West].sort().filter(t=>t!==form.team1).map(t=><option key={t} value={t}>{t}</option>)
+                : (NBA_TEAMS[form.conference]||[]).filter(t=>t!==form.team1).map(t=><option key={t} value={t}>{t}</option>)
+              }
+            </select>
+          </div>
+          <div className="form-group"><label className="form-label">Round</label><select value={form.round} onChange={e=>set('round',e.target.value)}>{Object.entries(ROUND_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
+          <div className="form-group">
+            <label className="form-label">Conference</label>
+            <select value={form.conference} onChange={e=>{set('conference',e.target.value);set('team1','');set('team2','');}}>
+              <option>East</option><option>West</option><option>Finals</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-group"><label className="form-label">Initial status</label><select value={form.status} onChange={e=>set('status',e.target.value)}><option value="open">Open — picks allowed immediately</option><option value="pending">Pending — not open yet</option></select></div>
+        <div className="form-group"><label className="form-label">Game 1 tip-off — picks auto-lock at this time</label><input type="datetime-local" value={form.tipOffTime} onChange={e=>set('tipOffTime',e.target.value)} /></div>
+        {msg.text&&<div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+        <button className="btn btn-primary" onClick={add} disabled={!form.team1.trim()||!form.team2.trim()}>Add series</button>
+      </div>
+      <div className="card">
+        <div className="card-title">All series</div>
+        {series.length===0&&<p className="empty-state">No series yet.</p>}
+        {[...series].sort((a,b)=>a.round-b.round).map(s=>{
+          const status=getStatus(s);
+          return (
+            <div key={s.id} className="admin-s-item">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'0.625rem'}}>
+                <div><div style={{fontWeight:600,fontSize:'0.9rem'}}>{s.team1} vs {s.team2}</div><div style={{fontSize:'0.7rem',color:'var(--muted)',marginTop:2}}>{ROUND_LABEL[s.round]} · {s.conference}</div></div>
+                <span className={`badge badge-${status}`}>{status}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.625rem',background:'var(--bg2)',borderRadius:8,padding:'0.5rem 0.75rem'}}>
+                <span style={{fontSize:'0.78rem',color:'var(--muted)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.team1}</span>
+                <button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:'1rem'}} onClick={()=>updateRecord(s,Math.max(0,(s.record?.t1||0)-1),s.record?.t2||0)}>−</button>
+                <span style={{fontWeight:700,fontSize:'1rem',minWidth:14,textAlign:'center'}}>{s.record?.t1||0}</span>
+                <button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:'1rem'}} onClick={()=>updateRecord(s,(s.record?.t1||0)+1,s.record?.t2||0)}>+</button>
+                <span style={{fontSize:'0.8rem',color:'var(--muted)',margin:'0 4px'}}>–</span>
+                <button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:'1rem'}} onClick={()=>updateRecord(s,s.record?.t1||0,Math.max(0,(s.record?.t2||0)-1))}>−</button>
+                <span style={{fontWeight:700,fontSize:'1rem',minWidth:14,textAlign:'center'}}>{s.record?.t2||0}</span>
+                <button className="btn btn-ghost btn-sm" style={{padding:'2px 8px',fontSize:'1rem'}} onClick={()=>updateRecord(s,s.record?.t1||0,(s.record?.t2||0)+1)}>+</button>
+                <span style={{fontSize:'0.78rem',color:'var(--muted)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textAlign:'right'}}>{s.team2}</span>
+              </div>
+              <div className="btn-row">
+                {s.status!=='open'   &&<button className="btn btn-success btn-sm" onClick={()=>setStatus(s,'open')}>Open picks</button>}
+                {s.status==='open'   &&<button className="btn btn-danger  btn-sm" onClick={()=>setStatus(s,'locked')}>Lock picks</button>}
+                {s.status==='locked' &&<button className="btn btn-ghost   btn-sm" onClick={()=>setStatus(s,'open')}>Re-open</button>}
+                {s.status!=='pending'&&s.status!=='completed'&&<button className="btn btn-ghost btn-sm" onClick={()=>setStatus(s,'pending')}>Pending</button>}
+                <button className="btn btn-danger btn-sm" onClick={()=>del(s)}>Delete</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AdminResults({ series }) {
+  const [res,setRes]=useState({});
+  const [msg,setMsg]=useState({text:'',type:'success'});
+  const setR=(id,k,v)=>setRes(prev=>({...prev,[id]:{...(prev[id]||{}),[k]:v}}));
+  const flash=(text,type='success')=>{setMsg({text,type});setTimeout(()=>setMsg({text:'',type:'success'}),3500);};
+
+  const eligible=[...series].filter(s=>s.status==='locked'||s.status==='completed'||getStatus(s)==='locked').sort((a,b)=>a.round-b.round);
+
+  async function save(s) {
+    const r=res[s.id]||{};
+    const winner=r.winner!==undefined?r.winner:s.result?.winner;
+    const games =r.games !==undefined?r.games :s.result?.games;
+    if(!winner){flash('Select the winning team','error');return;}
+    if(!games) {flash('Select games played','error');return;}
+    try{
+      await db.collection('series').doc(s.id).update({
+        status:'completed',
+        result:{winner,games:Number(games),mvp:(r.mvp!==undefined?r.mvp:s.result?.mvp)||''}
+      });
+      flash(`✓ ${s.team1} vs ${s.team2} saved — points recalculated`);
+      setRes(prev=>{const n={...prev};delete n[s.id];return n;});
+    }catch(e){flash(e.message,'error');}
+  }
+
+  return (
+    <div>
+      {msg.text&&<div className={`alert alert-${msg.type}`}>{msg.text}</div>}
+      {eligible.length===0
+        ?<div className="alert alert-info">No locked series yet. Lock a series in the Series tab first.</div>
+        :eligible.map(s=>{
+          const r=res[s.id]||{};
+          const done=s.status==='completed'&&s.result;
+          const winner=r.winner!==undefined?r.winner:(done?s.result.winner:null);
+          const games =r.games !==undefined?r.games :(done?Number(s.result.games):null);
+          const mvp   =r.mvp   !==undefined?r.mvp   :(done?s.result.mvp:'');
+          return (
+            <div key={s.id} className="card">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.875rem'}}>
+                <div><div style={{fontWeight:600}}>{s.team1} vs {s.team2}</div><div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:2}}>{ROUND_LABEL[s.round]}</div></div>
+                {done&&<span style={{fontSize:'0.8rem',color:'var(--green)',fontWeight:600}}>✓ {s.result.winner} in {s.result.games}</span>}
+              </div>
+              <div className="form-label">Winner</div>
+              <div className="pick-opts" style={{marginBottom:'0.75rem'}}>
+                {[s.team1,s.team2].map(t=><div key={t} className={`pick-opt ${winner===t?'sel':''}`} onClick={()=>setR(s.id,'winner',t)}>{t}</div>)}
+              </div>
+              <div className="form-label">Games played</div>
+              <div className="games-opts" style={{marginBottom:'0.875rem'}}>
+                {[4,5,6,7].map(g=><div key={g} className={`games-opt ${games===g?'sel':''}`} onClick={()=>setR(s.id,'games',g)}>{g}</div>)}
+              </div>
+              {s.round===4&&(
+                <div className="form-group"><label className="form-label">Finals MVP</label><input type="text" placeholder="Player name..." value={mvp} onChange={e=>setR(s.id,'mvp',e.target.value)} /></div>
+              )}
+              <button className="btn btn-primary" onClick={()=>save(s)}>{done?'Update result':'Save result & calculate points'}</button>
+            </div>
+          );
+        })
+      }
+    </div>
+  );
+}
+
+// ── Mount ─────────────────────────────────────────────────────────────────────
+if (!db) {
+  const el = document.getElementById('root');
+  if (el) el.innerHTML = '<div class="splash"><div class="splash-icon">⚠️</div><div class="splash-title">Firebase failed to load</div><div class="splash-sub" style="color:#fca5a5">Check the console for details and reload the page.</div></div>';
+} else {
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+}
+</script>
+</body>
+</html>
